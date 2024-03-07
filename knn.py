@@ -6,6 +6,11 @@ import numpy as np
 from sklearn.neighbors import KNeighborsClassifier
 import sklearn
 
+import warnings
+from sklearn.exceptions import DataConversionWarning
+warnings.filterwarnings(action='ignore', category=DataConversionWarning)
+np.random.seed(7272)
+
 def generate_random_data(n, d, num_classes):
     X = 100 * np.random.rand(n, d)
     y = np.ndarray((n, 1))
@@ -59,21 +64,76 @@ def iterative_prototype_scan(X, labels):
 
     return np.array(U), np.array(U_labels)
 
+def original_condense(X, labels):
+    """
+    Implementation of the following:
+    https://citeseerx.ist.psu.edu/document?repid=rep1&type=pdf&doi=7c3771fd6829630cf450af853df728ecd8da4ab2
+    """
+    labels = labels.reshape(-1, 1)
+    store = []
+    grabbag = []
+    store.append(0)
+    for i in range(1, X.shape[0]):
+        X_store = points_from_indices(X, store)
+        X_i = points_from_indices(X, i)
+        neigh = KNeighborsClassifier(n_neighbors=1)
+        neigh.fit(X_store, labels[store, :])
+        if neigh.score(X_i, labels[i, :]) > 0:
+            grabbag.append(i)
+        else:
+            store.append(i)
+    while True:
+        original_length = len(grabbag)
+        for pt in grabbag:
+            grabbag.remove(pt)
+            X_store = points_from_indices(X, store)
+            X_pt = points_from_indices(X, pt)
+            neigh = KNeighborsClassifier(n_neighbors=1)
+            neigh.fit(X_store, labels[store, :])
+            if neigh.score(X_pt, labels[pt, :]) > 0:
+                grabbag.append(pt)
+            else:
+                store.append(pt)
+        if original_length - len(grabbag) == 0:
+            break
+    return X[store, :], labels[store, :].squeeze()
+    
+def points_from_indices(X, indices):
+    if type(indices) == int or len(indices) == 1:
+        return X[indices, :].reshape(1, -1)
+    else:
+        return X[indices, :]
 
-X, y = generate_random_data(200, 200000, 2)
+n = 100
+d = 500
+c = 2
+X, y = generate_random_data(n, d, c)
 
-print(X)
+# print(X)
 print('Original dataset shape %s' % Counter(y))  
-cnn = CondensedNearestNeighbour(sampling_strategy='all')  
-X_res, y_res = cnn.fit_resample(X, y)  
+# cnn = CondensedNearestNeighbour(sampling_strategy='all')  
+# X_res, y_res = cnn.fit_resample(X, y)  
 # cnn = CondensedNearestNeighbour(sampling_strategy='auto')  
 # X_res, y_res = cnn.fit_resample(X_res, y_res) 
-print('Resampled dataset shape %s' % Counter(y_res))
-print(f"Original training set size: {y.shape[0]}. Compressed set size: {y_res.shape[0]}")
+# print('Resampled dataset shape %s' % Counter(y_res))
+# print(f"Original training set size: {y.shape[0]}. Compressed set size: {y_res.shape[0]}")
 # X_res, y_res = iterative_prototype_scan(X, y)
 # print('Resampled dataset shape: %s' % Counter(y_res))
+
+
+X_res, y_res = original_condense(X, y)
+X_res, y_res = X_res[:n//2, :], y_res[:n//2]
+print('Resampled dataset shape: %s' % Counter(y_res))
 neigh = KNeighborsClassifier(n_neighbors=1)
 neigh.fit(X_res, y_res)
-print(f"Correctly predicted: {neigh.score(X, y) * X.shape[0]}; Parameters: {y_res.shape[0]}")
-print(f"Bits per parameter: {neigh.score(X, y) * X.shape[0] / y_res.shape[0]}")
-# print(f"Original training set size: {y.shape[0]}. Compressed set size: {y_res.shape[0]}")
+num_correct = neigh.score(X, y) * X.shape[0]
+print(f"Correctly predicted: {num_correct}; Parameters: {y_res.shape[0]}")
+print(f"Bits per parameter: {num_correct / y_res.shape[0]}")
+
+# X_res, y_res = X[:n//2, :], y[:n//2]
+# print('Resampled dataset shape: %s' % Counter(y_res))
+# neigh = KNeighborsClassifier(n_neighbors=1)
+# neigh.fit(X_res, y_res)
+# num_correct = neigh.score(X, y) * X.shape[0]
+# print(f"Correctly predicted: {num_correct}; Parameters: {y_res.shape[0]}")
+# print(f"Bits per parameter: {num_correct / y_res.shape[0]}")
