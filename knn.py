@@ -104,8 +104,8 @@ def points_from_indices(X, indices):
     else:
         return X[indices, :]
 
-n = 100
-d = 500
+n = 400
+d = 5000
 c = 2
 X, y = generate_random_data(n, d, c)
 
