@@ -242,7 +242,9 @@ def preprocess(data, fill_mode=True, min_freq=10, onehot_cols=[]):
     if fill_mode:
         for i in range(data.shape[-1]):
             mode = stats.mode(data[((data[:, i] < -1 - eps) +
-                                    (data[:, i] > -1 + eps))][:, i]).mode[0]
+                                    (data[:, i] > -1 + eps))][:, i]).mode
+            # if type(mode) != float or type(mode) != int:
+            #     mode = mode[0]
             data[(data[:, i] > -1 - eps) * (data[:, i] < -1 + eps)][:, i] = mode
 
     return data, onehot_features
@@ -281,13 +283,15 @@ def shuffle_and_partition(t_data, t_labels, data_name):
 def make_single_line_plot(xs, ys):
     plt.plot(xs, ys)
     plt.title(f'Validation Accuracy vs. Tree Depth for Decision Tree')
-    plt.xlabel('Max Tree Depth')
+    plt.xlabel('Number of Nodes / Number of If/Else Clauses')
     plt.ylabel('Validation Accuracy')
-    plt.show()
+    # plt.show()
+    plt.savefig("sweep.png")
 
 def depth_sweep(train_data, train_labels, valid_data, valid_labels):
     depths = []
     accuracies = []
+    node_counts = []
     for i in range(1, 41):
         depths.append(i)
         dt = DecisionTree(max_depth=i, feature_labels=features)
@@ -300,7 +304,8 @@ def depth_sweep(train_data, train_labels, valid_data, valid_labels):
         print(f"Training accuracy: {train_acc}")
         print(f"Validation accuracy: {valid_acc}")
         accuracies.append(valid_acc)
-    make_single_line_plot(depths, accuracies)
+        node_counts.append(count_nodes(dt))
+    make_single_line_plot(node_counts, accuracies)
 
 def results_to_csv(y_test, name):
     y_test = np.array(y_test)
@@ -340,9 +345,9 @@ def setup(dataset):
 
     if dataset == "titanic":
         # Load titanic data
-        path_train = './dataset/titanic/titanic_training.csv'
+        path_train = '/home/pingpong-michael/code/294/dataset/titanic/titanic_training.csv'
         data = genfromtxt(path_train, delimiter=',', dtype=None, encoding=None)
-        path_test = './dataset/titanic/titanic_test_data.csv'
+        path_test = '/home/pingpong-michael/code/294/dataset/titanic/titanic_test_data.csv'
         test_data = genfromtxt(path_test, delimiter=',', dtype=None, encoding=None)
         y = data[1:, -1]  # label = survived
         class_names = ["Died", "Survived"]
@@ -397,7 +402,7 @@ def setup(dataset):
         assert len(features) == 32
 
         # Load spam data
-        path_train = './dataset/spam/spam_data.mat'
+        path_train = '/home/pingpong-michael/code/294/dataset/spam/spam_data.mat'
         data = scipy.io.loadmat(path_train)
         X = data['training_data']
         y = np.squeeze(data['training_labels'])
@@ -413,14 +418,13 @@ def count_nodes(root: DecisionTree):
     if root is None:
         return 0
     
-    # Recursive count: 1 for the current node plus counts for left and right subtrees
     return 1 + count_nodes(root.left) + count_nodes(root.right)
 
 if __name__ == "__main__":
     random.seed(727272)
     np.random.seed(6312)
-    launch = {"basic": True, "sklearn": False, "bagged": False, "forest": False, "sweep": False}
-    dataset = "titanic"
+    launch = {"basic": False, "sklearn": False, "bagged": False, "forest": False, "sweep": True}
+    dataset = "spam"
 
     X, y, Z, sklearn_params, bagging_params, rforest_params, features, class_names = setup(dataset)
     print("Features:", features)
@@ -439,11 +443,9 @@ if __name__ == "__main__":
         valid_pred = dt.predict(valid_data)
         valid_acc = sklearn.metrics.accuracy_score(valid_pred, valid_labels)
         
-        #print("Predictions", dt.predict(Z)[:10])
         print(f"Training accuracy: {train_acc}")
         print(f"Validation accuracy: {valid_acc}")
         print(f"Number of nodes: {count_nodes(dt)}")
-        visualize(dt, dataset)
 
     if launch["sklearn"]:
         print("\n\nPart (c): sklearn's decision tree")
