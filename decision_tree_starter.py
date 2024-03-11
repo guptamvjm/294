@@ -8,10 +8,7 @@ import scipy.stats
 import sklearn.model_selection
 import sklearn.tree
 from numpy import genfromtxt
-from scipy import stats
-from sklearn.base import BaseEstimator, ClassifierMixin
 import random
-import pydot
 import matplotlib.pyplot as plt
 import pandas as pd
 
@@ -28,7 +25,6 @@ class DecisionTree:
         self.data, self.pred = None, None  # for leaf nodes
         self.position = pos
 
-    
     @staticmethod
     def entropy(x_idxs, y):
         ent = 0
@@ -53,7 +49,6 @@ class DecisionTree:
         H_after = H_after / (left_idxs.shape[0] + right_idxs.shape[0])
         return before_entropy - H_after
     
-
     @staticmethod
     def gini_impurity(X, y, thresh):
         # TODO: implement gini impurity function
@@ -112,10 +107,10 @@ class DecisionTree:
             else:
                 self.max_depth = 0
                 self.data, self.labels = X, y
-                self.pred = stats.mode(y, keepdims=True).mode[0]
+                self.pred = scipy.stats.mode(y, keepdims=True).mode[0]
         else:
             self.data, self.labels = X, y
-            self.pred = stats.mode(y, keepdims=True).mode[0]
+            self.pred = scipy.stats.mode(y, keepdims=True).mode[0]
         return self
 
     def predict(self, X):
@@ -127,7 +122,6 @@ class DecisionTree:
             yhat[idx0] = self.left.predict(X0)
             yhat[idx1] = self.right.predict(X1)
             return yhat
-
 
     def __repr__(self):
         if self.max_depth == 0:
@@ -142,77 +136,6 @@ class DecisionTree:
         if self.max_depth == 0:
             return pos + "Prediction: %s ---- Amount of Points: %s" % (self.pred, self.labels.size)
         return pos + f"{self.features[self.split_idx]} < {self.thresh}"
-
-
-class BaggedTrees(BaseEstimator, ClassifierMixin):
-    def __init__(self, params=None, n=200, subset_scale=1):
-        if params is None:
-            params = {}
-        self.params = params
-        self.n = n
-        self.subset_scale = subset_scale
-        self.decision_trees = [
-            #sklearn.tree.DecisionTreeClassifier(random_state=i, **self.params)
-            DecisionTree(**self.params)
-            for i in range(self.n)
-        ]
-
-    def fit(self, X, y):
-        i = 0
-        for t in self.decision_trees:
-            i += 1
-            if i % 5 == 0:
-                print(f"Fitting tree #{i}")
-            subsample, subsample_labels = self.gen_subset(X, y)
-            t.fit(subsample, subsample_labels)
-    
-    def gen_subset(self, X, y):
-        num_samples = int(X.shape[0] * self.subset_scale)
-        idxs = np.random.randint(0, high=X.shape[0], size=num_samples)
-        #print(idxs)
-        return X[idxs], y[idxs]
-
-    def predict(self, X):
-        yhat = []
-        predictions = []
-        for t in self.decision_trees:
-            predictions.append(t.predict(X))
-        predictions = np.array(predictions)
-        predictions = predictions.T
-        #print(f"Predictions matrix: {predictions}")
-        for i in range(X.shape[0]):
-            points_pred = predictions[i,:]
-            avg = sum(points_pred) / self.n
-            #if avg != 0 and avg != 1:
-                #print(f"Average for point {i}: {avg}")
-            yhat.append(scipy.stats.mode(points_pred, keepdims=True)[0][0])
-        return yhat
-
-class RandomForest(BaggedTrees):
-    def __init__(self, params=None, n=200, m=0):
-        if params is None:
-            params = {}
-        self.params = params
-        self.m = m
-        self.n = n
-        params["feat_amt"] = self.m
-        if "subset_scale" in params:
-            s = params["subset_scale"]
-            params.pop("subset_scale")
-        else:
-            s = 1
-        super().__init__(params=params, n=self.n, subset_scale=s)
-
-class BoostedRandomForest(RandomForest):
-    def fit(self, X, y):
-        self.w = np.ones(X.shape[0]) / X.shape[0]  # Weights on data
-        self.a = np.zeros(self.n)  # Weights on decision trees
-        # TODO: implement function
-        return self
-
-    def predict(self, X):
-        # TODO: implement function
-        pass
 
 def preprocess(data, fill_mode=True, min_freq=10, onehot_cols=[]):
     # fill_mode = False
@@ -241,14 +164,13 @@ def preprocess(data, fill_mode=True, min_freq=10, onehot_cols=[]):
     # features such as gender or cabin type, which are not ordered.
     if fill_mode:
         for i in range(data.shape[-1]):
-            mode = stats.mode(data[((data[:, i] < -1 - eps) +
+            mode = scipy.stats.mode(data[((data[:, i] < -1 - eps) +
                                     (data[:, i] > -1 + eps))][:, i]).mode
             # if type(mode) != float or type(mode) != int:
             #     mode = mode[0]
             data[(data[:, i] > -1 - eps) * (data[:, i] < -1 + eps)][:, i] = mode
 
     return data, onehot_features
-
 
 def evaluate(clf):
     print("Cross validation", sklearn.model_selection.cross_val_score(clf, X, y, scoring="accuracy"))
@@ -257,34 +179,19 @@ def evaluate(clf):
         first_splits = [(features[term[0]], term[1]) for term in counter.most_common()]
         print("First splits", first_splits)
 
-def shuffle_data(t_data, t_labels, data_name):
-    indices = list(range(t_data.shape[0]))
-    random.shuffle(indices)
-    shuffled_labels = []
-    shuffled_data = []
-    while indices:
-        idx = indices.pop()
-        shuffled_labels.append(t_labels[idx])
-        shuffled_data.append(t_data[idx])
-    shuffled_labels = np.array(shuffled_labels)
-    shuffled_data = np.array(shuffled_data)
-    print(f"{data_name} shuffled! Data shape: {shuffled_data.shape}")
-    # print(shuffled_labels[1:10])
-    return shuffled_data, shuffled_labels
-
 def partition(t_data, t_labels):
     validation_size = int(0.2 * t_data.shape[0])
     return t_data[:validation_size], t_labels[:validation_size], t_data[validation_size:], t_labels[validation_size:]
 
-def shuffle_and_partition(t_data, t_labels, data_name):
-    shuffled_data, labels = shuffle_data(t_data, t_labels, data_name)
-    return partition(shuffled_data, labels)
-
-def make_single_line_plot(xs, ys):
-    plt.plot(xs, ys)
-    plt.title(f'Validation Accuracy vs. Tree Depth for Decision Tree')
+def plot_sweep(xs, accuracies):
+    train_accuracies = [a[0] for a in accuracies]
+    valid_accuracies = [a[1] for a in accuracies]
+    plt.plot(xs, train_accuracies, label="Train Accuracy")
+    plt.plot(xs, valid_accuracies, label="Validation Accuracy")
+    plt.title(f'Accuracy vs. Tree Depth for Decision Tree')
     plt.xlabel('Number of Nodes / Number of If/Else Clauses')
-    plt.ylabel('Validation Accuracy')
+    plt.ylabel('Accuracy (%)')
+    plt.legend()
     # plt.show()
     plt.savefig("sweep.png")
 
@@ -303,46 +210,11 @@ def depth_sweep(train_data, train_labels, valid_data, valid_labels):
         print(f"Tree Depth: {i}")
         print(f"Training accuracy: {train_acc}")
         print(f"Validation accuracy: {valid_acc}")
-        accuracies.append(valid_acc)
+        accuracies.append((train_acc, valid_acc))
         node_counts.append(count_nodes(dt))
-    make_single_line_plot(node_counts, accuracies)
-
-def results_to_csv(y_test, name):
-    y_test = np.array(y_test)
-    y_test = y_test.astype(int)
-    df = pd.DataFrame({'Category': y_test})
-    df.index += 1 # Ensures that the index starts at 1
-    df.to_csv(f'{name}_submission.csv', index_label='Id')
-    print("CSV Saved!")
-
-def visualize(dt, dataset):
-    graph = pydot.Dot("my_graph", graph_type="graph", bgcolor="white")
-    nodes = []
-    populate_graph(dt, graph, nodes)
-    last_name =  nodes[-1]
-    graph.write_png(f"{dataset}_output.png")
-    #plt.imshow(im)
-
-def populate_graph(dt, graph, nodes):
-    this_name = dt.node_name()
-    right = dt.right
-    left = dt.left
-    if right != None and left != None:
-        name = left.node_name()
-        graph.add_node(pydot.Node(name, label=name, shape="box"))
-        graph.add_edge(pydot.Edge(this_name, name, color="blue"))
-        nodes.append(name)
-        name = right.node_name()
-        graph.add_node(pydot.Node(name, label=name, shape="box"))
-        graph.add_edge(pydot.Edge(this_name, name, color="blue"))
-        nodes.append(name)
-        populate_graph(left, graph, nodes)
-        populate_graph(right, graph, nodes)
-
+    plot_sweep(node_counts, accuracies)
 
 def setup(dataset):
-    N = 100
-
     if dataset == "titanic":
         # Load titanic data
         path_train = '/home/pingpong-michael/code/294/dataset/titanic/titanic_training.csv'
@@ -355,7 +227,6 @@ def setup(dataset):
 
         y = np.array(y[labeled_idx])
         y = y.astype(float).astype(int)
-
 
         print("\n\nPart (b): preprocessing the titanic dataset")
         X, onehot_features = preprocess(data[1:, :-1], onehot_cols=[1, 5, 7, 8])
@@ -417,21 +288,19 @@ def setup(dataset):
 def count_nodes(root: DecisionTree):
     if root is None:
         return 0
-    
     return 1 + count_nodes(root.left) + count_nodes(root.right)
 
 if __name__ == "__main__":
     random.seed(727272)
     np.random.seed(6312)
     launch = {"basic": False, "sklearn": False, "bagged": False, "forest": False, "sweep": True}
-    dataset = "spam"
+    dataset = "titanic"
 
     X, y, Z, sklearn_params, bagging_params, rforest_params, features, class_names = setup(dataset)
     print("Features:", features)
     print("Train/test size:", X.shape, Z.shape)
-    valid_data, valid_labels, train_data, train_labels = shuffle_and_partition(X, y, dataset)
-    print("\n\nPart 0: constant classifier")
-    print("Accuracy", 1 - np.sum(y) / y.size)
+    X, y = sklearn.utils.shuffle(X, y)
+    valid_data, valid_labels, train_data, train_labels = partition(X, y)
     # Basic decision tree
     if launch["basic"]:
         print("\n\nPart (a-b): simplified decision tree")
@@ -446,49 +315,6 @@ if __name__ == "__main__":
         print(f"Training accuracy: {train_acc}")
         print(f"Validation accuracy: {valid_acc}")
         print(f"Number of nodes: {count_nodes(dt)}")
-
-    if launch["sklearn"]:
-        print("\n\nPart (c): sklearn's decision tree")
-        clf = sklearn.tree.DecisionTreeClassifier(criterion="entropy", **sklearn_params)
-        clf.fit(X, y)
-        evaluate(clf)
-        out = io.StringIO()
-        # You may want to install "gprof2dot"
-        sklearn.tree.export_graphviz(
-        clf, out_file=out, feature_names=features, class_names=class_names)
-        graph = pydot.graph_from_dot_data(out.getvalue())
-        pydot.graph_from_dot_data(out.getvalue())[0].write_pdf("%s-tree.pdf" % dataset)
-
-
-    if launch["bagged"]:
-        print("\n\nPart (d): bagged trees")
-        dt = BaggedTrees(params=bagging_params, n=60, subset_scale=1)
-        dt.fit(train_data, train_labels)
-        train_pred = dt.predict(train_data)
-        train_acc = sklearn.metrics.accuracy_score(train_pred, train_labels)
-        valid_pred = dt.predict(valid_data)
-        for t in dt.decision_trees:
-            th_pred = t.predict(valid_data)
-            th_acc = sklearn.metrics.accuracy_score(th_pred, valid_labels)
-            print(f"Validation accuracy for tree: {th_acc}")
-        valid_acc = sklearn.metrics.accuracy_score(valid_pred, valid_labels)
-        #print("Predictions", dt.predict(Z)[:10])
-        print(f"Training accuracy: {train_acc}")
-        print(f"Validation accuracy: {valid_acc}")
-
-    if launch["forest"]:
-        print("\n\nPart (e): random forest")
-        dt = RandomForest(params=rforest_params, n=100, m=int(np.sqrt(train_data.shape[1])))
-        dt.fit(train_data, train_labels)
-        train_pred = dt.predict(train_data)
-        train_acc = sklearn.metrics.accuracy_score(train_pred, train_labels)
-        valid_pred = dt.predict(valid_data)
-        valid_acc = sklearn.metrics.accuracy_score(valid_pred, valid_labels)
-        #print("Predictions", dt.predict(Z)[:10])
-        print(f"Training accuracy: {train_acc}")
-        print(f"Validation accuracy: {valid_acc}")
-        test_pred = dt.predict(Z)
-        results_to_csv(test_pred, dataset)
 
     if launch["sweep"]:
         depth_sweep(train_data, train_labels, valid_data, valid_labels)
