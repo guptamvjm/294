@@ -9,11 +9,11 @@ import sklearn
 import warnings
 from sklearn.exceptions import DataConversionWarning
 warnings.filterwarnings(action='ignore', category=DataConversionWarning)
-np.random.seed(7272)
+# np.random.seed(7272)
 
 def generate_random_data(n, d, num_classes):
     X = 100 * np.random.rand(n, d)
-    y = np.ndarray((n, 1))
+    y = np.ndarray((n, 1), dtype=int)
     points_per_class = n // num_classes
     for i in range(num_classes):
         y[i * points_per_class : (i+1) * points_per_class] = i
@@ -104,36 +104,84 @@ def points_from_indices(X, indices):
     else:
         return X[indices, :]
 
-n = 400
-d = 5000
+
+n = 100
+d = 150
 c = 2
 X, y = generate_random_data(n, d, c)
 
-# print(X)
-print('Original dataset shape %s' % Counter(y))  
-# cnn = CondensedNearestNeighbour(sampling_strategy='all')  
-# X_res, y_res = cnn.fit_resample(X, y)  
-# cnn = CondensedNearestNeighbour(sampling_strategy='auto')  
-# X_res, y_res = cnn.fit_resample(X_res, y_res) 
-# print('Resampled dataset shape %s' % Counter(y_res))
-# print(f"Original training set size: {y.shape[0]}. Compressed set size: {y_res.shape[0]}")
-# X_res, y_res = iterative_prototype_scan(X, y)
-# print('Resampled dataset shape: %s' % Counter(y_res))
+def old_experiments():
+
+    # print(X)
+    print('Original dataset shape %s' % Counter(y))  
+    # cnn = CondensedNearestNeighbour(sampling_strategy='all')  
+    # X_res, y_res = cnn.fit_resample(X, y)  
+    # cnn = CondensedNearestNeighbour(sampling_strategy='auto')  
+    # X_res, y_res = cnn.fit_resample(X_res, y_res) 
+    # print('Resampled dataset shape %s' % Counter(y_res))
+    # print(f"Original training set size: {y.shape[0]}. Compressed set size: {y_res.shape[0]}")
+    # X_res, y_res = iterative_prototype_scan(X, y)
+    # print('Resampled dataset shape: %s' % Counter(y_res))
 
 
-X_res, y_res = original_condense(X, y)
-X_res, y_res = X_res[:n//2, :], y_res[:n//2]
-print('Resampled dataset shape: %s' % Counter(y_res))
-neigh = KNeighborsClassifier(n_neighbors=1)
-neigh.fit(X_res, y_res)
-num_correct = neigh.score(X, y) * X.shape[0]
-print(f"Correctly predicted: {num_correct}; Parameters: {y_res.shape[0]}")
-print(f"Bits per parameter: {num_correct / y_res.shape[0]}")
+    X_res, y_res = original_condense(X, y)
+    X_res, y_res = X_res[:n//2, :], y_res[:n//2]
+    print('Resampled dataset shape: %s' % Counter(y_res))
+    neigh = KNeighborsClassifier(n_neighbors=1)
+    neigh.fit(X_res, y_res)
+    num_correct = neigh.score(X, y) * X.shape[0]
+    print(f"Correctly predicted: {num_correct}; Parameters: {y_res.shape[0]}")
+    print(f"Bits per parameter: {num_correct / y_res.shape[0]}")
 
-# X_res, y_res = X[:n//2, :], y[:n//2]
-# print('Resampled dataset shape: %s' % Counter(y_res))
+    # X_res, y_res = X[:n//2, :], y[:n//2]
+    # print('Resampled dataset shape: %s' % Counter(y_res))
+    # neigh = KNeighborsClassifier(n_neighbors=1)
+    # neigh.fit(X_res, y_res)
+    # num_correct = neigh.score(X, y) * X.shape[0]
+    # print(f"Correctly predicted: {num_correct}; Parameters: {y_res.shape[0]}")
+    # print(f"Bits per parameter: {num_correct / y_res.shape[0]}")
+
+
+def generate_table(X, y):
+    table = [(sum(X[i]), y[i]) for i in range(X.shape[0])]
+    table = sorted(table, key=lambda x: x[0])
+    return table
+
+def og_algo_8(X, y, num_classes=2):
+    table = generate_table(X, y)
+    thresholds = 0
+    c = 0
+    for i in range(len(table)):
+        if not table[i][1] == c:
+            c = table[i][1]
+            thresholds += 1
+    minthreshs = np.log(thresholds) / np.log(num_classes)
+    mec = minthreshs * (X.shape[1] + 1) + minthreshs + 1
+    return thresholds, minthreshs, mec
+
+def binary_optimal_table(table):
+    accuracies = []
+    for i in range(3, len(table) - 3):
+        below = table[:i]
+        above = table[i:]
+        zero_below = len(list(filter(lambda x: x[1] == 0, below)))
+        one_above = len(list(filter(lambda x: x[1] == 1, above)))
+        accuracies.append((max(zero_below + one_above, len(table) - (zero_below + one_above)), i))
+    return max(accuracies, key=lambda x: x[0])
+
+# clf = sklearn.svm.SVC(C=1.0, kernel="linear")
+# clf.fit(X, y)
+# score = clf.score(X, y) * X.shape[0]
+thresh, minthreshs, mec = og_algo_8(X, y)
+memorized = binary_optimal_table(generate_table(X, y))
+print("Points memorized: ", memorized[0])
+print(f"i: {memorized[1]}")
+
+print(f"Num thresholds: {thresh, minthreshs}")
+# print(f"Ratio: {thresh / memorized[0]}")
+
 # neigh = KNeighborsClassifier(n_neighbors=1)
-# neigh.fit(X_res, y_res)
+# neigh.fit(X, y)
 # num_correct = neigh.score(X, y) * X.shape[0]
-# print(f"Correctly predicted: {num_correct}; Parameters: {y_res.shape[0]}")
-# print(f"Bits per parameter: {num_correct / y_res.shape[0]}")
+# print(f"Num correct: {num_correct}")
+# # print(n / thresh)
