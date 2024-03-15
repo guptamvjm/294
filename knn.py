@@ -93,7 +93,7 @@ def original_condense(X, labels):
             X_pt = points_from_indices(X, pt)
             neigh = KNeighborsClassifier(n_neighbors=1)
             neigh.fit(X_store, labels[store, :])
-            if neigh.score(X_pt, labels[pt, :]) > 0:
+            if neigh.score(X_pt, labels[pt, :]) == 1:
                 grabbag.append(pt)
             else:
                 store.append(pt)
@@ -169,39 +169,46 @@ def binary_optimal_table(table):
 
 results = {}
 for n_over_d in np.linspace(1, 2.5, num=10):
+# for k in range(1, 10, 2):
     n = 300
-    d = int(n / n_over_d)
+    # d = int(n / n_over_d)
     # d = i * 10
-    # d = 3
+    d = 3000
     c = 2
     avg = 0
     trial = []
-    for _ in range(10):
+    for _ in range(5):
     
         X, y = generate_random_data(n, d, c)
         # print(y)
         # clf = sklearn.svm.LinearSVC(C=1.0, loss="hinge")
         # clf.fit(X, y)
         # score = clf.score(X, y) * X.shape[0]
+
         X_res, y_res = original_condense(X, y)
-        X_res, y_res = X_res[:, :], y_res[:]
+        points_to_keep = int(n//n_over_d)
+        X_res, y_res = X_res[:points_to_keep, :], y_res[:points_to_keep]
         print(len(y_res) / X.shape[0])
+
         neigh = KNeighborsClassifier(n_neighbors=1)
         # neigh.fit(X_res, y_res)
 
-        neigh.fit(X, y)
+        neigh.fit(X_res, y_res)
 
-        score = neigh.score(X, y) * X.shape[0]
+        score = neigh.score(X, y) * n
         print(f"SVM Score: {score}")
-        thresh, minthreshs, mec = og_algo_8(X, y)
-        print(f"SVM Try: {score / thresh}")
+        if score / n >= 0.98:
+            score = n
+        # thresh, minthreshs, mec = og_algo_8(X, y)
+        # print(f"SVM Try: {score / thresh}")
+        # print(f"Num thresholds: {thresh, minthreshs}")
+
         trial.append(score / n)
 
         # memorized = binary_optimal_table(generate_table(X, y))
         # print("Points memorized: ", memorized[0])
         # print(f"i: {memorized[1]}")
 
-        print(f"Num thresholds: {thresh, minthreshs}")
         
         # print(f"Points per threshold: {X.shape[0] / thresh}")
     avg = sum(trial) / len(trial)
