@@ -5,10 +5,13 @@ from imblearn.under_sampling import CondensedNearestNeighbour
 import numpy as np
 from sklearn.neighbors import KNeighborsClassifier
 import sklearn
+import matplotlib.pyplot as plt
 
 import warnings
 from sklearn.exceptions import DataConversionWarning
 warnings.filterwarnings(action='ignore', category=DataConversionWarning)
+warnings.filterwarnings("ignore")
+# warnings.filterwarnings(action='ignore', category=FutureWarning)
 # np.random.seed(7272)
 
 def generate_random_data(n, d, num_classes):
@@ -105,11 +108,6 @@ def points_from_indices(X, indices):
         return X[indices, :]
 
 
-n = 100
-d = 150
-c = 2
-X, y = generate_random_data(n, d, c)
-
 def old_experiments():
 
     # print(X)
@@ -125,7 +123,7 @@ def old_experiments():
 
 
     X_res, y_res = original_condense(X, y)
-    X_res, y_res = X_res[:n//2, :], y_res[:n//2]
+    X_res, y_res = X_res[:, :], y_res[:]
     print('Resampled dataset shape: %s' % Counter(y_res))
     neigh = KNeighborsClassifier(n_neighbors=1)
     neigh.fit(X_res, y_res)
@@ -169,15 +167,57 @@ def binary_optimal_table(table):
         accuracies.append((max(zero_below + one_above, len(table) - (zero_below + one_above)), i))
     return max(accuracies, key=lambda x: x[0])
 
-# clf = sklearn.svm.SVC(C=1.0, kernel="linear")
-# clf.fit(X, y)
-# score = clf.score(X, y) * X.shape[0]
-thresh, minthreshs, mec = og_algo_8(X, y)
-memorized = binary_optimal_table(generate_table(X, y))
-print("Points memorized: ", memorized[0])
-print(f"i: {memorized[1]}")
+results = {}
+for n_over_d in np.linspace(1, 2.5, num=10):
+    n = 300
+    d = int(n / n_over_d)
+    # d = i * 10
+    # d = 3
+    c = 2
+    avg = 0
+    trial = []
+    for _ in range(10):
+    
+        X, y = generate_random_data(n, d, c)
+        # print(y)
+        # clf = sklearn.svm.LinearSVC(C=1.0, loss="hinge")
+        # clf.fit(X, y)
+        # score = clf.score(X, y) * X.shape[0]
+        X_res, y_res = original_condense(X, y)
+        X_res, y_res = X_res[:, :], y_res[:]
+        print(len(y_res) / X.shape[0])
+        neigh = KNeighborsClassifier(n_neighbors=1)
+        # neigh.fit(X_res, y_res)
 
-print(f"Num thresholds: {thresh, minthreshs}")
+        neigh.fit(X, y)
+
+        score = neigh.score(X, y) * X.shape[0]
+        print(f"SVM Score: {score}")
+        thresh, minthreshs, mec = og_algo_8(X, y)
+        print(f"SVM Try: {score / thresh}")
+        trial.append(score / n)
+
+        # memorized = binary_optimal_table(generate_table(X, y))
+        # print("Points memorized: ", memorized[0])
+        # print(f"i: {memorized[1]}")
+
+        print(f"Num thresholds: {thresh, minthreshs}")
+        
+        # print(f"Points per threshold: {X.shape[0] / thresh}")
+    avg = sum(trial) / len(trial)
+    percent_correct = sum([1 for t in trial if t == 1]) / len(trial)
+    results[n_over_d] = percent_correct
+results = list(results.items())
+dimensions = [r[0] for r in results]
+mem_ratios = [r[1] for r in results]
+plt.plot(dimensions, mem_ratios, 'go--')
+# plt.title(f'Accuracy vs. Tree Depth for Decision Tree')
+# plt.xlabel('Number of Nodes / Number of If/Else Clauses')
+# plt.ylabel('Accuracy (%)')
+# plt.legend()
+# plt.show()
+plt.savefig(f"mec.png")
+
 # print(f"Ratio: {thresh / memorized[0]}")
 
 # neigh = KNeighborsClassifier(n_neighbors=1)
