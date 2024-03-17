@@ -6,6 +6,7 @@ import numpy as np
 from sklearn.neighbors import KNeighborsClassifier
 import sklearn
 import matplotlib.pyplot as plt
+import pdb
 
 import warnings
 from sklearn.exceptions import DataConversionWarning
@@ -16,56 +17,14 @@ warnings.filterwarnings("ignore")
 
 def generate_random_data(n, d, num_classes):
     X = 100 * np.random.rand(n, d)
-    y = np.ndarray((n, 1), dtype=int)
+    y = np.zeros((n, 1), dtype=int)
     points_per_class = n // num_classes
     for i in range(num_classes):
         y[i * points_per_class : (i+1) * points_per_class] = i
-        # y[i] = np.random.choice(list(range(num_classes)))
-    # X[n-1] = X[n-1] * 0 + 1
-    # y[n-1] = num_classes
     X, y = sklearn.utils.shuffle(X, y)
     return X, y.squeeze()
 
-def find_nearest_prototype(x, prototypes):
-    """
-    Find the nearest prototype to the element x from the set of prototypes.
-    """
-    distances = [np.linalg.norm(x - prototype) for prototype in prototypes]
-    if not distances:
-        return None
-    return np.argmin(distances)
-
-def iterative_prototype_scan(X, labels):
-    """
-    Iteratively scan elements in X and update the set U of prototypes.
-    """
-    U = []  # Set of prototypes
-    U_labels = []  # Labels corresponding to prototypes
-    
-    # Initial scan to find the nearest prototype for each element in X
-
-    while True:
-        # Find the first element x whose nearest prototype has a different label
-        idx_to_remove = None
-        for i in range(X.shape[0]):
-            nearest_idx = find_nearest_prototype(X[i], U)
-            if len(U) == 0 or labels[nearest_idx] != labels[i]:    
-                # Add x to U and remove it from X
-                U.append(X[i])
-                U_labels.append(labels[i])
-                idx_to_remove = i
-                break
-
-        if idx_to_remove is not None:
-            # Remove the element from X
-            X = np.delete(X, idx_to_remove, axis=0)
-            labels = np.delete(labels, idx_to_remove, axis=0)
-
-        else:
-            # No more prototypes added, break the loop
-            break
-
-    return np.array(U), np.array(U_labels)
+# def custom_score(clf, data, labels):
 
 def original_condense(X, labels):
     """
@@ -80,65 +39,91 @@ def original_condense(X, labels):
         X_store = points_from_indices(X, store)
         X_i = points_from_indices(X, i)
         neigh = KNeighborsClassifier(n_neighbors=1)
-        neigh.fit(X_store, labels[store, :])
-        if neigh.score(X_i, labels[i, :]) > 0:
-            grabbag.append(i)
-        else:
+        neigh.fit(X_store, labels[store].flatten())
+        if neigh.score(X_i, labels[i].flatten()) == 0:
             store.append(i)
+        else:
+            grabbag.append(i)
+    # print([labels[i] for i in grabbag])
+    # print([labels[i] for i in store])
+    
     while True:
-        original_length = len(grabbag)
+        # points_added = 0
+        to_remove = []
         for pt in grabbag:
-            grabbag.remove(pt)
             X_store = points_from_indices(X, store)
             X_pt = points_from_indices(X, pt)
             neigh = KNeighborsClassifier(n_neighbors=1)
-            neigh.fit(X_store, labels[store, :])
-            if neigh.score(X_pt, labels[pt, :]) == 1:
-                grabbag.append(pt)
+            neigh.fit(X_store, labels[store].flatten())
+            # print(f"{pt, neigh.predict(X_pt), labels[pt, :].flatten()}")
+            if neigh.score(X_pt, labels[pt].flatten()) == 0:
+                # print(f"{pt, neigh.predict(X_pt), labels[pt, :].flatten()}")
+                # store.append(pt)
+                to_remove.append(pt)
             else:
-                store.append(pt)
-        if original_length - len(grabbag) == 0:
+                pass
+        if len(to_remove) == 0:
             break
-    return X[store, :], labels[store, :].squeeze()
+        else:
+            print(f"loop; {to_remove}")
+            for pt in to_remove:
+                grabbag.remove(pt)
+        # if points_added == 0:
+        #     break
     
+    # neigh = KNeighborsClassifier(n_neighbors=1)
+    # neigh.fit(X[store, :], labels[store, :])
+    # print(f"Condense: {neigh.score(X[grabbag, :], labels[grabbag, :])}")
+    # y_pred = neigh.predict(X[grabbag, :])
+    # Find misclassified points
+    # misclassified_indices = np.where(y_pred != labels[grabbag, :].flatten())[0]
+    # print(f"Misclassifications: {misclassified_indices}")
+    # print(f"Grabbag indices: {[grabbag[int(i)] for i in list(misclassified_indices)]}")
+    # print(y_pred)
+    # print(labels[grabbag, :].flatten())
+    print(f"SORTED: {sorted(store)}")
+    return X[store], labels[store].flatten()
+
+def border_ratio(x, x_label, X, labels):
+    """
+    Calculate the border ratio for a given data point x in the dataset X with labels.
+    """
+    # Find indices of examples with different and same labels
+    diff_label_indices = np.where(labels != x_label)[0]
+    same_label_indices = np.where(labels == x_label)[0]
+
+    # Calculate distance to the nearest example with a different label
+    closest_external = np.argmin(np.linalg.norm(X[diff_label_indices] - x, axis=1))
+    closest_external = X[diff_label_indices][closest_external]
+    closest_to_closest_external = np.argmin(np.linalg.norm(X[same_label_indices] - closest_external, axis=1))
+    closest_to_closest_external = X[same_label_indices][closest_to_closest_external]
+    ratio = np.linalg.norm(closest_to_closest_external - closest_external) / np.linalg.norm(closest_external - x)
+    assert 0 <= ratio <= 1, f"Ratio: {ratio}"
+    return ratio
+
+# def new_condense(X, labels):
+    
+#     store = np.copy(X)
+#     store_labels = np.copy(labels)
+#     while True:
+#         points_changed = 0
+#         for i in range(store.shape[0]):
+#             neigh = KNeighborsClassifier(n_neighbors=1)
+#             without = np.delete(store, i, axis=0)
+#             without_labels = np.delete(store_labels, i, axis=0)
+#             neigh.fit(without, without_labels)
+#             if neigh.score(X, labels) == 1:
+#                 store = without
+
+
+
+
+
 def points_from_indices(X, indices):
     if type(indices) == int or len(indices) == 1:
         return X[indices, :].reshape(1, -1)
     else:
         return X[indices, :]
-
-
-def old_experiments():
-
-    # print(X)
-    print('Original dataset shape %s' % Counter(y))  
-    # cnn = CondensedNearestNeighbour(sampling_strategy='all')  
-    # X_res, y_res = cnn.fit_resample(X, y)  
-    # cnn = CondensedNearestNeighbour(sampling_strategy='auto')  
-    # X_res, y_res = cnn.fit_resample(X_res, y_res) 
-    # print('Resampled dataset shape %s' % Counter(y_res))
-    # print(f"Original training set size: {y.shape[0]}. Compressed set size: {y_res.shape[0]}")
-    # X_res, y_res = iterative_prototype_scan(X, y)
-    # print('Resampled dataset shape: %s' % Counter(y_res))
-
-
-    X_res, y_res = original_condense(X, y)
-    X_res, y_res = X_res[:, :], y_res[:]
-    print('Resampled dataset shape: %s' % Counter(y_res))
-    neigh = KNeighborsClassifier(n_neighbors=1)
-    neigh.fit(X_res, y_res)
-    num_correct = neigh.score(X, y) * X.shape[0]
-    print(f"Correctly predicted: {num_correct}; Parameters: {y_res.shape[0]}")
-    print(f"Bits per parameter: {num_correct / y_res.shape[0]}")
-
-    # X_res, y_res = X[:n//2, :], y[:n//2]
-    # print('Resampled dataset shape: %s' % Counter(y_res))
-    # neigh = KNeighborsClassifier(n_neighbors=1)
-    # neigh.fit(X_res, y_res)
-    # num_correct = neigh.score(X, y) * X.shape[0]
-    # print(f"Correctly predicted: {num_correct}; Parameters: {y_res.shape[0]}")
-    # print(f"Bits per parameter: {num_correct / y_res.shape[0]}")
-
 
 def generate_table(X, y):
     table = [(sum(X[i]), y[i]) for i in range(X.shape[0])]
@@ -157,78 +142,36 @@ def og_algo_8(X, y, num_classes=2):
     mec = minthreshs * (X.shape[1] + 1) + minthreshs + 1
     return thresholds, minthreshs, mec
 
-def binary_optimal_table(table):
-    accuracies = []
-    for i in range(3, len(table) - 3):
-        below = table[:i]
-        above = table[i:]
-        zero_below = len(list(filter(lambda x: x[1] == 0, below)))
-        one_above = len(list(filter(lambda x: x[1] == 1, above)))
-        accuracies.append((max(zero_below + one_above, len(table) - (zero_below + one_above)), i))
-    return max(accuracies, key=lambda x: x[0])
 
-results = {}
-for n_over_d in np.linspace(1, 2.5, num=10):
-# for k in range(1, 10, 2):
-    n = 300
-    # d = int(n / n_over_d)
-    # d = i * 10
-    d = 3000
-    c = 2
-    avg = 0
-    trial = []
-    for _ in range(5):
+for c in range(2, 6):
+    results = {}
+    for d in range(4, 10):
+        print(f"D: {d}")
+        trials = []
+        for t in range(10):
+            print(f"trial: {t}")
+            n = 2**d
+            X, y = generate_random_data(n, d, c)
+            border_ratios = np.array([border_ratio(X[i], y[i], X, y) for i in range(X.shape[0])])
+            # Sort X based on the calculated border ratios
+            sorted_indices = np.flipud(np.argsort(border_ratios))
+            X, y = X[sorted_indices], y[sorted_indices]
+
+            X_res, y_res = original_condense(X, y)
+            trials.append(X.shape[0] / X_res.shape[0])
+            neigh = KNeighborsClassifier(n_neighbors=1)
+            neigh.fit(X_res, y_res)
+            s = neigh.score(X, y)
+            if s != 1:
+                print(f"Warning: s {s}, n {n}, d {d}, c {c}")
+        print(trials)
+        results[d] = sum(trials) / len(trials)
     
-        X, y = generate_random_data(n, d, c)
-        # print(y)
-        # clf = sklearn.svm.LinearSVC(C=1.0, loss="hinge")
-        # clf.fit(X, y)
-        # score = clf.score(X, y) * X.shape[0]
-
-        X_res, y_res = original_condense(X, y)
-        points_to_keep = int(n//n_over_d)
-        X_res, y_res = X_res[:points_to_keep, :], y_res[:points_to_keep]
-        print(len(y_res) / X.shape[0])
-
-        neigh = KNeighborsClassifier(n_neighbors=1)
-        # neigh.fit(X_res, y_res)
-
-        neigh.fit(X_res, y_res)
-
-        score = neigh.score(X, y) * n
-        print(f"SVM Score: {score}")
-        if score / n >= 0.98:
-            score = n
-        # thresh, minthreshs, mec = og_algo_8(X, y)
-        # print(f"SVM Try: {score / thresh}")
-        # print(f"Num thresholds: {thresh, minthreshs}")
-
-        trial.append(score / n)
-
-        # memorized = binary_optimal_table(generate_table(X, y))
-        # print("Points memorized: ", memorized[0])
-        # print(f"i: {memorized[1]}")
-
-        
-        # print(f"Points per threshold: {X.shape[0] / thresh}")
-    avg = sum(trial) / len(trial)
-    percent_correct = sum([1 for t in trial if t == 1]) / len(trial)
-    results[n_over_d] = percent_correct
-results = list(results.items())
-dimensions = [r[0] for r in results]
-mem_ratios = [r[1] for r in results]
-plt.plot(dimensions, mem_ratios, 'go--')
-# plt.title(f'Accuracy vs. Tree Depth for Decision Tree')
-# plt.xlabel('Number of Nodes / Number of If/Else Clauses')
-# plt.ylabel('Accuracy (%)')
-# plt.legend()
-# plt.show()
-plt.savefig(f"mec.png")
-
-# print(f"Ratio: {thresh / memorized[0]}")
-
-# neigh = KNeighborsClassifier(n_neighbors=1)
-# neigh.fit(X, y)
-# num_correct = neigh.score(X, y) * X.shape[0]
-# print(f"Num correct: {num_correct}")
-# # print(n / thresh)
+    results = list(results.items())
+    dimensions = [r[0] for r in results]
+    mem_ratios = [r[1] for r in results]
+    plt.clf()
+    plt.xlabel("Dimension of data")
+    plt.ylabel("Original set size / minimum to memorize size")
+    plt.plot(dimensions, mem_ratios, 'go--')
+    plt.savefig(f"knn_{c}_classes.png")
