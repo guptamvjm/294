@@ -45,8 +45,7 @@ def original_condense(X, labels):
             if neigh.score(X_pt, labels[pt].flatten()) == 1:
                 to_remove.append(pt)
             else:
-                # store.append(pt)
-                pass
+                store.append(pt)
         if len(to_remove) == 0:
             break
         else:
@@ -110,9 +109,6 @@ def prune_many(X, labels, store):
         else:
             store = maybe_store
 
-
-
-
 def points_from_indices(X, indices):
     if type(indices) == int or len(indices) == 1:
         return X[indices, :].reshape(1, -1)
@@ -120,20 +116,18 @@ def points_from_indices(X, indices):
         return X[indices, :]
 
 
-for c in range(2, 6):
+for c in range(2, 5):
     results = {}
     print(f"C: {c}")
     # for d in range(16, 256, 16):
-    for d_exp in range(3, 9):
+    for d_exp in range(2, 7):
         d = 2 ** d_exp
         print(f"D: {d}")
-        # if 2**(int(d//8)) // d < 3:
-        #     continue
         trials = []
         for t in range(20):
             print(f"trial: {t}")
             # n = 2**(int(d//8))
-            n = d * 10
+            n = c * d * 5
             X, y = generate_random_data(n, d, c)
 
             border_ratios = np.array([border_ratio(X[i], y[i], X, y) for i in range(X.shape[0])])
@@ -146,23 +140,11 @@ for c in range(2, 6):
             neigh.fit(X_res, y_res)
             s = neigh.score(X, y)
             trials.append(X.shape[0] * s / X_res.shape[0])
-            
-            if s != 1:
-                print(f"Warning: s {s}, n {n}, d {d}, c {c}")
-        # print(trials)
+            # if s != 1:
+            #     print(f"Warning: s {s}, n {n}, d {d}, c {c}")
         results[d] = sum(trials) / len(trials)
         print(f"Compression: {results[d]}")
     item_results = list(results.items())
     dimensions = [r[0] for r in item_results]
     mem_ratios = [r[1] for r in item_results]
-    # plt.clf()
-    # plt.xlabel("Dimension of data")
-    # plt.ylabel("Original set size / minimum to memorize size")
-    # plt.plot(dimensions, mem_ratios, 'go--')
-    # plt.savefig(f"knn_{c}_classes.png")
     print(results)
-    # print(f"Number of classes: {c} \
-    #       \nFull set size / minimum set size for d=2: {results[2]} \
-    #       \nFull set size / minimum set size for d=4: {results[4]} \
-    #       \nFull set size / minimum set size for d=8: {results[8]} \
-    #       \nFull set size / minimum set size for d=10: {results[10]}")
