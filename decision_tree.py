@@ -1,6 +1,7 @@
 # You may want to install "gprof2dot"
 import io
 from collections import Counter, defaultdict
+import os
 
 import numpy as np
 import scipy.io
@@ -243,11 +244,12 @@ def depth_sweep(train_data, train_labels, valid_data, valid_labels, impurity="en
     plot_sweep(node_counts, accuracies, impurity)
 
 def setup(dataset):
+    cwd = os.getcwd()
     if dataset == "titanic":
         # Load titanic data
-        path_train = '/home/pingpong-michael/code/294/dataset/titanic/titanic_training.csv'
+        path_train = f'{cwd}/dataset/titanic/titanic_training.csv'
         data = genfromtxt(path_train, delimiter=',', dtype=None, encoding=None)
-        path_test = '/home/pingpong-michael/code/294/dataset/titanic/titanic_test_data.csv'
+        path_test = f'{cwd}/dataset/titanic/titanic_test_data.csv'
         test_data = genfromtxt(path_test, delimiter=',', dtype=None, encoding=None)
         y = data[1:, -1]  # label = survived
         class_names = ["Died", "Survived"]
@@ -301,7 +303,7 @@ def setup(dataset):
         assert len(features) == 32
 
         # Load spam data
-        path_train = '/home/pingpong-michael/code/294/dataset/spam/spam_data.mat'
+        path_train = f'{cwd}/dataset/spam/spam_data.mat'
         data = scipy.io.loadmat(path_train)
         X = data['training_data']
         y = np.squeeze(data['training_labels'])
@@ -331,30 +333,31 @@ if __name__ == "__main__":
     random.seed(727272)
     np.random.seed(6312)
     launch = {"basic": False, "sweep": True}
-    dataset = "random"
+    # dataset = "random"
+    for dataset in ["titanic", "spam", "random"]:
 
-    X, y, Z, features, class_names = setup(dataset)
-    print("Features:", features)
-    print("Train/test size:", X.shape, Z.shape)
-    X, y = sklearn.utils.shuffle(X, y)
-    valid_data, valid_labels, train_data, train_labels = partition(X, y)
-    # Basic decision tree
-    if launch["basic"]:
-        dt = DecisionTree(max_depth=8, feature_labels=features)
-        dt.fit(train_data, train_labels)
-        out = io.StringIO()
-        train_pred = dt.predict(train_data)
-        train_acc = sklearn.metrics.accuracy_score(train_pred, train_labels)
-        valid_pred = dt.predict(valid_data)
-        valid_acc = sklearn.metrics.accuracy_score(valid_pred, valid_labels)
-        
-        print(f"Training accuracy: {train_acc}")
-        print(f"Validation accuracy: {valid_acc}")
-        print(f"Number of nodes: {count_nodes(dt)}")
+        X, y, Z, features, class_names = setup(dataset)
+        print("Features:", features)
+        print("Train/test size:", X.shape, Z.shape)
+        X, y = sklearn.utils.shuffle(X, y)
+        valid_data, valid_labels, train_data, train_labels = partition(X, y)
+        # Basic decision tree
+        if launch["basic"]:
+            dt = DecisionTree(max_depth=8, feature_labels=features)
+            dt.fit(train_data, train_labels)
+            out = io.StringIO()
+            train_pred = dt.predict(train_data)
+            train_acc = sklearn.metrics.accuracy_score(train_pred, train_labels)
+            valid_pred = dt.predict(valid_data)
+            valid_acc = sklearn.metrics.accuracy_score(valid_pred, valid_labels)
+            
+            print(f"Training accuracy: {train_acc}")
+            print(f"Validation accuracy: {valid_acc}")
+            print(f"Number of nodes: {count_nodes(dt)}")
 
-    if launch["sweep"]:
-        print("ENTROPY")
-        depth_sweep(train_data, train_labels, valid_data, valid_labels, impurity="entropy")
-        print("GINI")
-        depth_sweep(train_data, train_labels, valid_data, valid_labels, impurity="gini")
+        if launch["sweep"]:
+            print("ENTROPY")
+            depth_sweep(train_data, train_labels, valid_data, valid_labels, impurity="entropy")
+            print("GINI")
+            depth_sweep(train_data, train_labels, valid_data, valid_labels, impurity="gini")
 

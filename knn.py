@@ -1,12 +1,7 @@
-from collections import Counter  
-from sklearn.datasets import fetch_openml  
-from sklearn.preprocessing import scale  
-from imblearn.under_sampling import CondensedNearestNeighbour
 import numpy as np
 from sklearn.neighbors import KNeighborsClassifier
 import sklearn
 import matplotlib.pyplot as plt
-import pdb
 
 import warnings
 from sklearn.exceptions import DataConversionWarning
@@ -36,11 +31,10 @@ def original_condense(X, labels):
         X_i = points_from_indices(X, i)
         neigh = KNeighborsClassifier(n_neighbors=1)
         neigh.fit(X_store, labels[store].flatten())
-        if neigh.score(X_i, labels[i].flatten()) == 0:
-            store.append(i)
-        else:
+        if neigh.score(X_i, labels[i].flatten()) == 1:
             grabbag.append(i)
-    
+        else:
+            store.append(i)
     while True:
         to_remove = []
         for pt in grabbag:
@@ -48,18 +42,16 @@ def original_condense(X, labels):
             X_pt = points_from_indices(X, pt)
             neigh = KNeighborsClassifier(n_neighbors=1)
             neigh.fit(X_store, labels[store].flatten())
-            if neigh.score(X_pt, labels[pt].flatten()) == 0:
+            if neigh.score(X_pt, labels[pt].flatten()) == 1:
                 to_remove.append(pt)
             else:
+                # store.append(pt)
                 pass
         if len(to_remove) == 0:
             break
         else:
-            # print(f"loop; {to_remove}")
             for pt in to_remove:
                 grabbag.remove(pt)
-        # if points_added == 0:
-        #     break
     
     # neigh = KNeighborsClassifier(n_neighbors=1)
     # neigh.fit(X[store, :], labels[store, :])
@@ -71,7 +63,11 @@ def original_condense(X, labels):
     # print(f"Grabbag indices: {[grabbag[int(i)] for i in list(misclassified_indices)]}")
     # print(y_pred)
     # print(labels[grabbag, :].flatten())
+                
+    prunedX, prunedLabels = prune_many(X, labels, store)
+    return prunedX, prunedLabels
     return X[store], labels[store].flatten()
+
 
 def border_ratio(x, x_label, X, labels):
     """
@@ -90,26 +86,30 @@ def border_ratio(x, x_label, X, labels):
     assert 0 <= ratio <= 1, f"Ratio: {ratio}"
     return ratio
 
+def prune_one(X, labels, store, original_score):
+    for i in range(len(store) - 1):
+        without_i = store[:i] + store[i+1:]
+        pt = store[i]            
+        X_store = points_from_indices(X, without_i)
+        X_pt = points_from_indices(X, pt)
+        neigh = KNeighborsClassifier(n_neighbors=1)
+        neigh.fit(X_store, labels[without_i].flatten())
+        if neigh.score(X, labels.flatten()) == original_score:
+            store.remove(pt)
+            return store
+    return None
 
-def new_condense(X, labels):
-    store = list(range(X.shape[0]))
+def prune_many(X, labels, store):
+    neigh = KNeighborsClassifier(n_neighbors=1)
+    neigh.fit(X[store], labels[store].flatten())
+    original_score = neigh.score(X, labels.flatten())
     while True:
-        points_changed = 0
-        for i in range(len(store) - 1):
-            without_i = store[:i] + store[i+1:]
-            pt = store[i]            
-            X_store = points_from_indices(X, without_i)
-            X_pt = points_from_indices(X, pt)
-            neigh = KNeighborsClassifier(n_neighbors=1)
-            neigh.fit(X_store, labels[store].flatten())
-            if neigh.score(X, labels.flatten()) == 1:
-                store.remove(pt)
+        maybe_store = prune_one(X, labels, store, original_score)
+        if maybe_store is None:
+            return X[store], labels[store].flatten()
+        else:
+            store = maybe_store
 
-            without = np.delete(store, i, axis=0)
-            without_labels = np.delete(labels, i, axis=0)
-            neigh.fit(without, without_labels)
-            if neigh.score(X, labels) == 1:
-                store = without
 
 
 
@@ -123,29 +123,35 @@ def points_from_indices(X, indices):
 for c in range(2, 6):
     results = {}
     print(f"C: {c}")
-    for d in range(2, 10, 2):
+    # for d in range(16, 256, 16):
+    for d_exp in range(3, 9):
+        d = 2 ** d_exp
         print(f"D: {d}")
+        # if 2**(int(d//8)) // d < 3:
+        #     continue
         trials = []
-        for t in range(100):
-            # print(f"trial: {t}")
-            n = 2**d
+        for t in range(20):
+            print(f"trial: {t}")
+            # n = 2**(int(d//8))
+            n = d * 10
             X, y = generate_random_data(n, d, c)
 
-            # border_ratios = np.array([border_ratio(X[i], y[i], X, y) for i in range(X.shape[0])])
-            # # Sort X based on the calculated border ratios
-            # sorted_indices = np.flipud(np.argsort(border_ratios))
-            # X, y = X[sorted_indices], y[sorted_indices]
+            border_ratios = np.array([border_ratio(X[i], y[i], X, y) for i in range(X.shape[0])])
+            # Sort X based on the calculated border ratios
+            sorted_indices = np.flipud(np.argsort(border_ratios))
+            X, y = X[sorted_indices], y[sorted_indices]
 
             X_res, y_res = original_condense(X, y)
-            trials.append(X.shape[0] / X_res.shape[0])
             neigh = KNeighborsClassifier(n_neighbors=1)
             neigh.fit(X_res, y_res)
             s = neigh.score(X, y)
-            # if s != 1:
-            #     print(f"Warning: s {s}, n {n}, d {d}, c {c}")
+            trials.append(X.shape[0] * s / X_res.shape[0])
+            
+            if s != 1:
+                print(f"Warning: s {s}, n {n}, d {d}, c {c}")
         # print(trials)
         results[d] = sum(trials) / len(trials)
-    
+        print(f"Compression: {results[d]}")
     item_results = list(results.items())
     dimensions = [r[0] for r in item_results]
     mem_ratios = [r[1] for r in item_results]
@@ -154,8 +160,9 @@ for c in range(2, 6):
     # plt.ylabel("Original set size / minimum to memorize size")
     # plt.plot(dimensions, mem_ratios, 'go--')
     # plt.savefig(f"knn_{c}_classes.png")
-
-    print(f"Number of classes: {c} \
-          \nFull set size / minimum set size for d=2: {results[2]} \
-          \nFull set size / minimum set size for d=4: {results[4]} \
-          \nFull set size / minimum set size for d=8: {results[8]}")
+    print(results)
+    # print(f"Number of classes: {c} \
+    #       \nFull set size / minimum set size for d=2: {results[2]} \
+    #       \nFull set size / minimum set size for d=4: {results[4]} \
+    #       \nFull set size / minimum set size for d=8: {results[8]} \
+    #       \nFull set size / minimum set size for d=10: {results[10]}")
